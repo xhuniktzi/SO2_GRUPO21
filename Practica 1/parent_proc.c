@@ -49,12 +49,10 @@ void stat(int pid1, int pid2, int monitor, int fd) {
     }
     syscall_count = read_count + open_count + write_count;
 
-    printf("-------------------------------------------------\n");
-    printf("Llamadas al sistema de los procesos hijo: %d      \n", syscall_count);
-    printf("Llamadas write: %d                                \n", write_count);
-    printf("Llamadas read: %d                                 \n", read_count);
-    printf("Llamadas seek %d                                  \n", open_count);
-    printf("-------------------------------------------------\n");
+    printf("Llamadas totales:\t%d\n", syscall_count);
+    printf("Llamadas write:\t\t%d\n", write_count);
+    printf("Llamadas read:\t\t%d\n", read_count);
+    printf("Llamadas seek:\t\t%d\n", open_count);
     close(fd);
     kill(pid1, SIGKILL);
     kill(pid2, SIGKILL);
@@ -84,7 +82,7 @@ void log_syscall(const char *syscall_info) {
 
 void monitor_syscalls(int pid1, int pid2) {
     char command[512];
-    snprintf(command, sizeof(command), "sudo stap -v -e 'global pid1=%d, pid2=%d; "
+    snprintf(command, sizeof(command), "stap -v -e 'global pid1=%d, pid2=%d; "
              "probe syscall.read { if (pid() == pid1 || pid() == pid2) { "
              "printf(\"%%d:read(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } "
              "probe syscall.write { if (pid() == pid1 || pid() == pid2) { "
