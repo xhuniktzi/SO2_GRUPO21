@@ -17,8 +17,8 @@ void random_string(char *str, size_t size) {
 }
 
 void random_sleep() {
-    int sleep_time = (rand() % 3) + 1; // 1 to 3 seconds
-    sleep(sleep_time);
+    int sleep_time = (rand() % 3 + 1) * 1000000; // 1 to 3 seconds in microseconds
+    usleep(sleep_time);
 }
 
 int main() {

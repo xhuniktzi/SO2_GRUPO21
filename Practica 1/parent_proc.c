@@ -10,6 +10,11 @@
 
 #define LOG_FILE "syscalls.log"
 
+// Declaraciones de funciones
+void handle_sigint(int sig);
+void log_syscall(const char *syscall_info);
+void monitor_syscalls();
+
 int syscall_count = 0;
 int read_count = 0;
 int write_count = 0;
