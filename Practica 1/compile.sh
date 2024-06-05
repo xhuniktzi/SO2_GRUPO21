@@ -2,4 +2,4 @@
 
 gcc -o parent_proc.bin parent_proc.c
 gcc -o child_proc.bin child_proc.c
-chmod +x parent_proc.bin child_proc.bin
+chmod +x parent_proc.bin child_proc.bin monitor.stp
