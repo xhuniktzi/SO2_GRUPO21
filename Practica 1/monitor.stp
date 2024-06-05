@@ -1,24 +1,29 @@
-#! /usr/bin/stap
+#!/usr/bin/stap
 
-global syscall_count
-global read_count
-global write_count
-global open_count
+global pid1, pid2
 
-probe syscall.read, syscall.write, syscall.open
-{
-    if (pid() != ppid()) {
-        printf("Process %d: %s (%s)\n", pid(), name, ctime(gettimeofday_s()))
-        syscall_count++
-        if (name == "read") read_count++
-        if (name == "write") write_count++
-        if (name == "open") open_count++
+probe begin {
+    printf("Monitoring PIDs: %d, %d\n", pid1, pid2)
+}
+
+probe syscall.read {
+    if (pid() == pid1 || pid() == pid2) {
+        printf("%d:read(%s)\n", pid(), ctime(gettimeofday_s()))
     }
 }
 
-probe end
-{
-    printf("Total system calls: %d\n", syscall_count)
-    printf("Read: %d, Write: %d, Open: %d\n", read_count, write_count, open_count)
+probe syscall.write {
+    if (pid() == pid1 || pid() == pid2) {
+        printf("%d:write(%s)\n", pid(), ctime(gettimeofday_s()))
+    }
 }
 
+probe syscall.lseek {
+    if (pid() == pid1 || pid() == pid2) {
+        printf("%d:lseek(%s)\n", pid(), ctime(gettimeofday_s()))
+    }
+}
+
+probe end {
+    printf("End of monitoring for PIDs: %d, %d\n", pid1, pid2)
+}

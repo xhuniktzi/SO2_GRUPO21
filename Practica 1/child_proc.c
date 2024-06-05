@@ -4,52 +4,44 @@
 #include <fcntl.h>
 #include <time.h>
 #include <string.h>
+#include <signal.h>
 
-#define FILENAME "practica1.txt"
+volatile sig_atomic_t sigint_received = 0;
+int fdch;
 
-void random_string(char *str, size_t size) {
-    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    for (size_t i = 0; i < size; i++) {
-        int key = rand() % (int)(sizeof(charset) - 1);
-        str[i] = charset[key];
-    }
-    str[size] = '\0';
+void ctrlc_handler(int signal) {
+    sigint_received = 1;
+    close(fdch);
 }
 
-void random_sleep() {
-    int sleep_time = (rand() % 3 + 1) * 1000000; // 1 to 3 seconds in microseconds
-    usleep(sleep_time);
+char random_char() {
+    const char charset[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const int charset_size = sizeof(charset) - 1;
+    return charset[rand() % charset_size];
 }
 
-int main() {
-    srand(time(NULL));
-    int fd = open(FILENAME, O_CREAT | O_RDWR | O_TRUNC, 0644);
-    if (fd == -1) {
-        perror("Failed to open file");
-        return 1;
-    }
+int main(int argc, char *argv[]) {
+    srand(time(NULL) + getpid());
+    fdch = open("practica1.txt", O_RDWR, 0777);
+    signal(SIGINT, ctrlc_handler);
 
-    while (1) {
-        int action = rand() % 3;
-        char buffer[9];
-        switch (action) {
-            case 0: // Read
-                lseek(fd, 0, SEEK_SET);
-                read(fd, buffer, 8);
-                buffer[8] = '\0';
-                break;
-            case 1: // Write
-                random_string(buffer, 8);
-                write(fd, buffer, 8);
-                break;
-            case 2: // Open (simulated by reopening the file)
-                close(fd);
-                fd = open(FILENAME, O_RDWR);
-                break;
+    while (!sigint_received) {
+        int time = rand() % 3 + 1;
+        int op = rand() % 3 + 1;
+
+        if (op == 1) {
+            char random_string[8];
+            for (int i = 0; i < 8; ++i) {
+                random_string[i] = random_char();
+            }
+            write(fdch, random_string, 8);
+        } else if (op == 2) {
+            char buff[8];
+            read(fdch, buff, 8);
+        } else {
+            lseek(fdch, 0, SEEK_SET);
         }
-        random_sleep();
+        sleep(time);
     }
-
-    close(fd);
     return 0;
 }

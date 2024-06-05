@@ -8,12 +8,11 @@
 #include <string.h>
 #include <fcntl.h>
 
-#define LOG_FILE "syscalls.log"
-
 // Declaraciones de funciones
 void handle_sigint(int sig);
 void log_syscall(const char *syscall_info);
-void monitor_syscalls();
+void monitor_syscalls(int pid1, int pid2);
+void stat(int pid1, int pid2, int monitor, int fd);
 
 int syscall_count = 0;
 int read_count = 0;
@@ -21,23 +20,50 @@ int write_count = 0;
 int open_count = 0;
 int pipe_fd[2];
 
-void handle_sigint(int sig) {
-    char buffer[256];
-    int bytes_read;
+volatile sig_atomic_t sigint_received = 0; // Variable compartida para indicar si se recibió la señal SIGINT
 
-    // Leer lo que queda en el pipe
-    while ((bytes_read = read(pipe_fd[0], buffer, sizeof(buffer) - 1)) > 0) {
-        buffer[bytes_read] = '\0';
-        log_syscall(buffer);
+void handle_sigint(int signal) {
+    sigint_received = 1; // Establecer la bandera al recibir la señal SIGINT
+}
+
+void stat(int pid1, int pid2, int monitor, int fd) {
+    printf("\n");
+    printf("Finalizando ejecución...\n");
+    char buff[1024];
+    char *action;
+    ssize_t bytes_read;
+    while ((bytes_read = read(fd, buff, sizeof(buff))) > 0) {
+        // Busca las acciones en el buffer
+        char *ptr = buff;
+        while ((action = strtok(ptr, "\n")) != NULL) {
+            ptr = NULL; // Siguiente llamada a strtok debe recibir NULL
+            // Incrementa el contador según la acción
+            if (strstr(action, "read") != NULL) {
+                read_count++;
+            } else if (strstr(action, "lseek") != NULL) {
+                open_count++;
+            } else if (strstr(action, "write") != NULL) {
+                write_count++;
+            }
+        }
     }
+    syscall_count = read_count + open_count + write_count;
 
-    printf("Total system calls: %d\n", syscall_count);
-    printf("Read: %d, Write: %d, Open: %d\n", read_count, write_count, open_count);
+    printf("-------------------------------------------------\n");
+    printf("Llamadas al sistema de los procesos hijo: %d      \n", syscall_count);
+    printf("Llamadas write: %d                                \n", write_count);
+    printf("Llamadas read: %d                                 \n", read_count);
+    printf("Llamadas seek %d                                  \n", open_count);
+    printf("-------------------------------------------------\n");
+    close(fd);
+    kill(pid1, SIGKILL);
+    kill(pid2, SIGKILL);
+    kill(monitor, SIGKILL);
     exit(0);
 }
 
 void log_syscall(const char *syscall_info) {
-    FILE *log = fopen(LOG_FILE, "a");
+    FILE *log = fopen("syscalls.log", "a");
     if (log == NULL) {
         perror("Failed to open log file");
         exit(1);
@@ -56,69 +82,62 @@ void log_syscall(const char *syscall_info) {
     if (strcmp(syscall, "open") == 0) open_count++;
 }
 
-void monitor_syscalls() {
-    char buffer[256];
-    int bytes_read;
-
-    while ((bytes_read = read(pipe_fd[0], buffer, sizeof(buffer) - 1)) > 0) {
-        buffer[bytes_read] = '\0';
-        log_syscall(buffer);
-    }
+void monitor_syscalls(int pid1, int pid2) {
+    char command[200];
+    sprintf(command, "stap -v -e 'global pid1=%d, pid2=%d; probe syscall.read { if (pid() == pid1 || pid() == pid2) { printf(\"%%d:read(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } probe syscall.write { if (pid() == pid1 || pid() == pid2) { printf(\"%%d:write(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } probe syscall.lseek { if (pid() == pid1 || pid() == pid2) { printf(\"%%d:lseek(%%s)\\n\", pid(), ctime(gettimeofday_s())) } }' > syscalls.log", pid1, pid2);
+    system(command);
 }
 
 int main() {
     signal(SIGINT, handle_sigint);
-    FILE *log = fopen(LOG_FILE, "w");
+    FILE *log = fopen("syscalls.log", "w");
     if (log == NULL) {
         perror("Failed to open log file");
         return 1;
     }
     fclose(log);
 
+    int fdch = open("practica1.txt", O_CREAT | O_TRUNC, 0777);
+    close(fdch);
+
     if (pipe(pipe_fd) == -1) {
         perror("pipe failed");
         return 1;
     }
 
-    pid_t stap_pid = fork();
-    if (stap_pid == -1) {
+    pid_t pid1 = fork();
+    if (pid1 == -1) {
         perror("fork failed");
         return 1;
     }
 
-    if (stap_pid == 0) {
-        // Redirigir la salida estándar a la entrada del pipe
-        dup2(pipe_fd[1], STDOUT_FILENO);
-        close(pipe_fd[0]);
-        close(pipe_fd[1]);
-
-        execl("/usr/bin/stap", "stap", "-v", "monitor.stp", NULL);
+    if (pid1 == 0) {
+        execl("./child_proc.bin", "./child_proc.bin", NULL);
         perror("execl failed");
         return 1;
     } else {
-        close(pipe_fd[1]);
-
-        pid_t child1 = fork();
-        if (child1 == 0) {
-            execl("./child_proc.bin", "./child_proc.bin", NULL);
-            perror("execl failed");
+        pid_t pid2 = fork();
+        if (pid2 == -1) {
+            perror("fork failed");
             return 1;
         }
 
-        pid_t child2 = fork();
-        if (child2 == 0) {
+        if (pid2 == 0) {
             execl("./child_proc.bin", "./child_proc.bin", NULL);
             perror("execl failed");
             return 1;
+        } else {
+            pid_t monitor = fork();
+            if (monitor == 0) {
+                monitor_syscalls(pid1, pid2);
+            }
+
+            int status;
+            while (!sigint_received) {
+                sleep(1);
+            }
+            stat(pid1, pid2, monitor, open("syscalls.log", O_RDONLY));
         }
-
-        monitor_syscalls();
-
-        // Esperar a que terminen los procesos hijo
-        wait(NULL);
-        wait(NULL);
-        wait(NULL);
     }
-
     return 0;
 }
