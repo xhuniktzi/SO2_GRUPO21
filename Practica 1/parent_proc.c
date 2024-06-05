@@ -83,8 +83,15 @@ void log_syscall(const char *syscall_info) {
 }
 
 void monitor_syscalls(int pid1, int pid2) {
-    char command[200];
-    sprintf(command, "stap -v -e 'global pid1=%d, pid2=%d; probe syscall.read { if (pid() == pid1 || pid() == pid2) { printf(\"%%d:read(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } probe syscall.write { if (pid() == pid1 || pid() == pid2) { printf(\"%%d:write(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } probe syscall.lseek { if (pid() == pid1 || pid() == pid2) { printf(\"%%d:lseek(%%s)\\n\", pid(), ctime(gettimeofday_s())) } }' > syscalls.log", pid1, pid2);
+    char command[512];
+    snprintf(command, sizeof(command), "sudo stap -v -e 'global pid1=%d, pid2=%d; "
+             "probe syscall.read { if (pid() == pid1 || pid() == pid2) { "
+             "printf(\"%%d:read(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } "
+             "probe syscall.write { if (pid() == pid1 || pid() == pid2) { "
+             "printf(\"%%d:write(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } "
+             "probe syscall.lseek { if (pid() == pid1 || pid() == pid2) { "
+             "printf(\"%%d:lseek(%%s)\\n\", pid(), ctime(gettimeofday_s())) } }' > syscalls.log",
+             pid1, pid2);
     system(command);
 }
 
