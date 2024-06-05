@@ -93,13 +93,7 @@ void log_syscall(const char *syscall_info) {
 
 void monitor_syscalls(int pid1, int pid2) {
     char command[512];
-    snprintf(command, sizeof(command), "stap -v -e 'global pid1=%d, pid2=%d; "
-             "probe syscall.read { if (pid() == pid1 || pid() == pid2) { "
-             "printf(\"%%d:read(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } "
-             "probe syscall.write { if (pid() == pid1 || pid() == pid2) { "
-             "printf(\"%%d:write(%%s)\\n\", pid(), ctime(gettimeofday_s())) } } "
-             "probe syscall.lseek { if (pid() == pid1 || pid() == pid2) { "
-             "printf(\"%%d:lseek(%%s)\\n\", pid(), ctime(gettimeofday_s())) } }' > " LOG_FILE,
+    snprintf(command, sizeof(command), "stap monitor.stp %d %d > " LOG_FILE,
              pid1, pid2);
     system(command);
 }
