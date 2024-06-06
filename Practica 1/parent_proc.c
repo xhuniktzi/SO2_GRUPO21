@@ -19,6 +19,7 @@ void handle_sigint(int sig);
 void log_syscall(const char *syscall_info);
 void monitor_syscalls(int pid1, int pid2);
 void finalize_stats(int pid1, int pid2, int monitor, int fd);
+void update_stats(const char *buffer);
 
 // Estructura para contar las llamadas a sistema
 typedef struct {
@@ -37,24 +38,20 @@ void handle_sigint(int signal) {
 }
 
 void update_stats(const char *buffer) {
-    char *action;
-    char *saveptr;
-    char buff_copy[1024];
-    strncpy(buff_copy, buffer, sizeof(buff_copy));
+    char action[16];
+    const char *ptr = buffer;
     
-    char *ptr = buff_copy;
-    while ((action = strtok_r(ptr, "\n", &saveptr)) != NULL) {
-        ptr = NULL; // Siguiente llamada a strtok debe recibir NULL
-        // Incrementa el contador según la acción
-        if (strstr(action, "read") != NULL) {
+    while (sscanf(ptr, "%15s", action) == 1) {
+        if (strcmp(action, "read") == 0) {
             stats.read_count++;
-        } else if (strstr(action, "lseek") != NULL) {
+        } else if (strcmp(action, "lseek") == 0) {
             stats.open_count++;
-        } else if (strstr(action, "write") != NULL) {
+        } else if (strcmp(action, "write") == 0) {
             stats.write_count++;
         }
+        stats.syscall_count = stats.read_count + stats.open_count + stats.write_count;
+        ptr += strlen(action) + 1;
     }
-    stats.syscall_count = stats.read_count + stats.open_count + stats.write_count;
 }
 
 void finalize_stats(int pid1, int pid2, int monitor, int fd) {
@@ -82,10 +79,6 @@ void log_syscall(const char *syscall_info) {
         perror("Failed to open log file");
         exit(1);
     }
-
-    char syscall[16];
-    int pid;
-    sscanf(syscall_info, "Process %d: %s", &pid, syscall);
 
     fprintf(log, "%s\n", syscall_info);
     fclose(log);
@@ -117,37 +110,45 @@ int main() {
     }
 
     pid_t pid1 = fork();
-    if (pid1 == -1) {
-        perror("fork failed");
-        return 1;
-    }
-
-    if (pid1 == 0) {
-        execl("./child_proc.bin", "./child_proc.bin", NULL);
-        perror("execl failed");
-        return 1;
-    } else {
-        pid_t pid2 = fork();
-        if (pid2 == -1) {
+    switch (pid1) {
+        case -1:
             perror("fork failed");
             return 1;
-        }
-
-        if (pid2 == 0) {
+        case 0:
             execl("./child_proc.bin", "./child_proc.bin", NULL);
             perror("execl failed");
             return 1;
-        } else {
-            pid_t monitor = fork();
-            if (monitor == 0) {
-                monitor_syscalls(pid1, pid2);
-            }
+        default:
+            break;
+    }
 
+    pid_t pid2 = fork();
+    switch (pid2) {
+        case -1:
+            perror("fork failed");
+            return 1;
+        case 0:
+            execl("./child_proc.bin", "./child_proc.bin", NULL);
+            perror("execl failed");
+            return 1;
+        default:
+            break;
+    }
+
+    pid_t monitor = fork();
+    switch (monitor) {
+        case -1:
+            perror("fork failed");
+            return 1;
+        case 0:
+            monitor_syscalls(pid1, pid2);
+            break;
+        default:
             while (!sigint_received) {
                 pause();
             }
             finalize_stats(pid1, pid2, monitor, open(LOG_FILE, O_RDONLY));
-        }
+            break;
     }
     return 0;
 }
