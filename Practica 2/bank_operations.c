@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
-#include <jansson.h>  // Biblioteca JSON
+#include <jansson.h>
+#include <time.h>
 
 #define MAX_USERS 1000
 #define MAX_OPERATIONS 1000
@@ -28,6 +29,9 @@ pthread_mutex_t lock;
 int user_count = 0;
 int operation_count = 0;
 
+char erroresUsuarios[10000];
+char erroresOperaciones[10000];
+
 void check_and_create_file(const char* filename) {
     FILE* file = fopen(filename, "r");
     if (!file) {
@@ -39,7 +43,6 @@ void check_and_create_file(const char* filename) {
     }
     fclose(file);
 }
-
 
 void* load_users(void* filename) {
     check_and_create_file((char*)filename);
@@ -69,11 +72,19 @@ void* load_users(void* filename) {
             break;
         }
 
-        users[user_count].account_number = json_integer_value(json_object_get(value, "no_cuenta"));
-        strcpy(users[user_count].name, json_string_value(json_object_get(value, "nombre")));
-        users[user_count].balance = json_real_value(json_object_get(value, "saldo"));
+        int no_cuenta = json_integer_value(json_object_get(value, "no_cuenta"));
+        const char *nombre = json_string_value(json_object_get(value, "nombre"));
+        double saldo = json_real_value(json_object_get(value, "saldo"));
 
-        user_count++;
+        if (no_cuenta && nombre && saldo >= 0) {
+            users[user_count].account_number = no_cuenta;
+            strcpy(users[user_count].name, nombre);
+            users[user_count].balance = saldo;
+            user_count++;
+        } else {
+            sprintf(erroresUsuarios + strlen(erroresUsuarios), "Error en la línea %zu\n", index + 1);
+        }
+
         pthread_mutex_unlock(&lock);
     }
 
@@ -102,29 +113,25 @@ void deposit(int account_number, double amount) {
         }
     }
     pthread_mutex_unlock(&lock);
-    printf("Account not found.\n");
 }
 
-void withdraw(int account_number, double amount) {
+void withdraw(int account_number, double amount, int line) {
     pthread_mutex_lock(&lock);
     for (int i = 0; i < user_count; ++i) {
         if (users[i].account_number == account_number) {
             if (users[i].balance >= amount) {
                 users[i].balance -= amount;
-                pthread_mutex_unlock(&lock);
-                return;
             } else {
-                pthread_mutex_unlock(&lock);
-                printf("Insufficient funds.\n");
-                return;
+                sprintf(erroresOperaciones + strlen(erroresOperaciones), "Línea #%d - Saldo insuficiente en cuenta %d\n", line, account_number);
             }
+            pthread_mutex_unlock(&lock);
+            return;
         }
     }
     pthread_mutex_unlock(&lock);
-    printf("Account not found.\n");
 }
 
-void transfer(int account1, int account2, double amount) {
+void transfer(int account1, int account2, double amount, int line) {
     pthread_mutex_lock(&lock);
     User *user1 = NULL, *user2 = NULL;
     for (int i = 0; i < user_count; ++i) {
@@ -141,10 +148,10 @@ void transfer(int account1, int account2, double amount) {
             user1->balance -= amount;
             user2->balance += amount;
         } else {
-            printf("Insufficient funds.\n");
+            sprintf(erroresOperaciones + strlen(erroresOperaciones), "Línea #%d - Saldo insuficiente en cuenta %d\n", line, account1);
         }
     } else {
-        printf("Account not found.\n");
+        sprintf(erroresOperaciones + strlen(erroresOperaciones), "Línea #%d - Cuenta no encontrada\n", line);
     }
     pthread_mutex_unlock(&lock);
 }
@@ -182,6 +189,20 @@ void* load_operations(void* filename) {
         operations[operation_count].account2 = json_integer_value(json_object_get(value, "cuenta2"));
         operations[operation_count].amount = json_real_value(json_object_get(value, "monto"));
 
+        switch (operations[operation_count].operation) {
+            case 1:
+                deposit(operations[operation_count].account1, operations[operation_count].amount);
+                break;
+            case 2:
+                withdraw(operations[operation_count].account1, operations[operation_count].amount, index + 1);
+                break;
+            case 3:
+                transfer(operations[operation_count].account1, operations[operation_count].account2, operations[operation_count].amount, index + 1);
+                break;
+            default:
+                sprintf(erroresOperaciones + strlen(erroresOperaciones), "Línea #%zu - Operación no válida\n", index + 1);
+        }
+
         operation_count++;
         pthread_mutex_unlock(&lock);
     }
@@ -201,12 +222,34 @@ void load_operations_multithreaded(const char* filename) {
     }
 }
 
+void estadoDeCuenta() {
+    FILE *reporte = fopen("Estado_de_cuenta.json", "w");
+    if (reporte == NULL) {
+        perror("Error al abrir el archivo");
+        return;
+    }
+
+    json_t *jarray = json_array();
+    for (int i = 0; i < user_count; ++i) {
+        json_t *jobj = json_object();
+        json_object_set_new(jobj, "no_cuenta", json_integer(users[i].account_number));
+        json_object_set_new(jobj, "nombre", json_string(users[i].name));
+        json_object_set_new(jobj, "saldo", json_real(users[i].balance));
+        json_array_append_new(jarray, jobj);
+    }
+
+    fprintf(reporte, "%s\n", json_dumps(jarray, JSON_INDENT(4)));
+    fclose(reporte);
+    json_decref(jarray);
+}
+
 void show_menu() {
     printf("1. Deposito\n");
     printf("2. Retiro\n");
     printf("3. Transferencia\n");
     printf("4. Consultar cuenta\n");
-    printf("5. Salir\n");
+    printf("5. Generar estado de cuenta\n");
+    printf("6. Salir\n");
 }
 
 void handle_user_input() {
@@ -231,7 +274,7 @@ void handle_user_input() {
                 scanf("%d", &account1);
                 printf("Ingrese el monto a retirar: ");
                 scanf("%lf", &amount);
-                withdraw(account1, amount);
+                withdraw(account1, amount, 0);
                 break;
             case 3:
                 printf("Ingrese el numero de cuenta origen: ");
@@ -240,7 +283,7 @@ void handle_user_input() {
                 scanf("%d", &account2);
                 printf("Ingrese el monto a transferir: ");
                 scanf("%lf", &amount);
-                transfer(account1, account2, amount);
+                transfer(account1, account2, amount, 0);
                 break;
             case 4:
                 printf("Ingrese el numero de cuenta: ");
@@ -252,6 +295,9 @@ void handle_user_input() {
                 }
                 break;
             case 5:
+                estadoDeCuenta();
+                break;
+            case 6:
                 return;
             default:
                 printf("Opción no válida\n");
@@ -265,11 +311,6 @@ int main() {
     const char* user_file = "users.json";
     const char* operations_file = "operations.json";
 
-    // Verificar y crear archivos si no existen
-    check_and_create_file(user_file);
-    check_and_create_file(operations_file);
-
-    // Cargar usuarios y operaciones
     load_users_multithreaded(user_file);
     load_operations_multithreaded(operations_file);
 
