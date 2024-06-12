@@ -124,25 +124,26 @@ void transferencia(int cuenta1, int cuenta2, float monto, int linea)
     struct usuario *origen = getUsuario(cuenta1);
     struct usuario *destino = getUsuario(cuenta2);
     char error[200];
-    if (destino != NULL)
+    if (origen == NULL)
     {
-        if (origen->saldo - monto >= 0)
-        {
-            origen->saldo -= monto;
-            destino->saldo += monto;
-            printf("Transferencia de %d a %d por %.2f completada.\n", cuenta1, cuenta2, monto);
-        }
-        else
-        {
-            sprintf(error, "Línea #%d - Saldo insuficiente en cuenta %d\n", linea, cuenta1);
-            strcat(erroresOperaciones, error);
-        }
+        sprintf(error, "Línea #%d - Cuenta origen %d no existe\n", linea, cuenta1);
+        strcat(erroresOperaciones, error);
+        return;
     }
-    else
+    if (destino == NULL)
     {
         sprintf(error, "Línea #%d - Cuenta destino %d no existe\n", linea, cuenta2);
         strcat(erroresOperaciones, error);
+        return;
     }
+    if (origen->saldo < monto)
+    {
+        sprintf(error, "Línea #%d - Saldo insuficiente en cuenta %d\n", linea, cuenta1);
+        strcat(erroresOperaciones, error);
+        return;
+    }
+    origen->saldo -= monto;
+    destino->saldo += monto;
 }
 
 void *cargarUsuarios(void *arg)
