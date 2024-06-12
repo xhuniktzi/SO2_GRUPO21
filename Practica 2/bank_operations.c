@@ -130,6 +130,7 @@ void transferencia(int cuenta1, int cuenta2, float monto, int linea)
         {
             origen->saldo -= monto;
             destino->saldo += monto;
+            printf("Transferencia de %d a %d por %.2f completada.\n", cuenta1, cuenta2, monto);
         }
         else
         {
