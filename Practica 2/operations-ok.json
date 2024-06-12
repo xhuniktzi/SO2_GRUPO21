@@ -1,0 +1,110 @@
+[
+    {
+        "operacion": 1,
+        "cuenta1": 1,
+        "cuenta2": 0,
+        "monto": 500.00
+    },
+    {
+        "operacion": 2,
+        "cuenta1": 2,
+        "cuenta2": 0,
+        "monto": 300.00
+    },
+    {
+        "operacion": 3,
+        "cuenta1": 3,
+        "cuenta2": 1,
+        "monto": 50.00
+    },
+    {
+        "operacion": 1,
+        "cuenta1": 4,
+        "cuenta2": 0,
+        "monto": 400.00
+    },
+    {
+        "operacion": 2,
+        "cuenta1": 5,
+        "cuenta2": 0,
+        "monto": 200.00
+    },
+    {
+        "operacion": 3,
+        "cuenta1": 6,
+        "cuenta2": 2,
+        "monto": 100.00
+    },
+    {
+        "operacion": 1,
+        "cuenta1": 7,
+        "cuenta2": 0,
+        "monto": 300.00
+    },
+    {
+        "operacion": 2,
+        "cuenta1": 8,
+        "cuenta2": 0,
+        "monto": 50.00
+    },
+    {
+        "operacion": 3,
+        "cuenta1": 9,
+        "cuenta2": 10,
+        "monto": 150.00
+    },
+    {
+        "operacion": 1,
+        "cuenta1": 1,
+        "cuenta2": 0,
+        "monto": 100.00
+    },
+    {
+        "operacion": 2,
+        "cuenta1": 2,
+        "cuenta2": 0,
+        "monto": 500.00
+    },
+    {
+        "operacion": 3,
+        "cuenta1": 3,
+        "cuenta2": 4,
+        "monto": 100.00
+    },
+    {
+        "operacion": 1,
+        "cuenta1": 5,
+        "cuenta2": 0,
+        "monto": 300.00
+    },
+    {
+        "operacion": 2,
+        "cuenta1": 6,
+        "cuenta2": 0,
+        "monto": 50.00
+    },
+    {
+        "operacion": 3,
+        "cuenta1": 7,
+        "cuenta2": 8,
+        "monto": 200.00
+    },
+    {
+        "operacion": 1,
+        "cuenta1": 9,
+        "cuenta2": 0,
+        "monto": 150.00
+    },
+    {
+        "operacion": 2,
+        "cuenta1": 10,
+        "cuenta2": 0,
+        "monto": 100.00
+    },
+    {
+        "operacion": 3,
+        "cuenta1": 1,
+        "cuenta2": 3,
+        "monto": 200.00
+    }
+]

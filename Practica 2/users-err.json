@@ -13,7 +13,7 @@
         "no_cuenta": 3,
         "nombre": "Carlos Sanchez",
         "saldo": -300.75
-    }, 
+    }, // Saldo negativo
     {
         "no_cuenta": 4,
         "nombre": "Ana Gomez",
@@ -33,7 +33,7 @@
         "no_cuenta": 1,
         "nombre": "Juan Perez",
         "saldo": 1000.50
-    }, 
+    }, // Cuenta duplicada
     {
         "no_cuenta": 7,
         "nombre": "Jose Garcia",
