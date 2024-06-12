@@ -1,0 +1,17 @@
+[
+    {
+        "no_cuenta": 1001,
+        "nombre": "Juan Perez",
+        "saldo": 1500.0
+    },
+    {
+        "no_cuenta": 1002,
+        "nombre": "Maria Lopez",
+        "saldo": 2500.0
+    },
+    {
+        "no_cuenta": 1003,
+        "nombre": "Carlos Sanchez",
+        "saldo": 3200.5
+    }
+]

@@ -1,0 +1,20 @@
+[
+    {
+        "operacion": 1,
+        "cuenta1": 1001,
+        "cuenta2": 0,
+        "monto": 500.0
+    },
+    {
+        "operacion": 2,
+        "cuenta1": 1002,
+        "cuenta2": 0,
+        "monto": 300.0
+    },
+    {
+        "operacion": 3,
+        "cuenta1": 1003,
+        "cuenta2": 1001,
+        "monto": 200.0
+    }
+]
