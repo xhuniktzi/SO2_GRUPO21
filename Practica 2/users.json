@@ -13,5 +13,40 @@
         "no_cuenta": 3,
         "nombre": "Carlos Sanchez",
         "saldo": 300.75
+    },
+    {
+        "no_cuenta": 4,
+        "nombre": "Ana Gomez",
+        "saldo": 1200.00
+    },
+    {
+        "no_cuenta": 5,
+        "nombre": "Luis Fernandez",
+        "saldo": 1500.00
+    },
+    {
+        "no_cuenta": 6,
+        "nombre": "Marta Diaz",
+        "saldo": 700.00
+    },
+    {
+        "no_cuenta": 7,
+        "nombre": "Jose Garcia",
+        "saldo": 900.00
+    },
+    {
+        "no_cuenta": 8,
+        "nombre": "Elena Torres",
+        "saldo": 1100.50
+    },
+    {
+        "no_cuenta": 9,
+        "nombre": "Pedro Alvarez",
+        "saldo": 450.25
+    },
+    {
+        "no_cuenta": 10,
+        "nombre": "Laura Sanchez",
+        "saldo": 1750.00
     }
 ]
