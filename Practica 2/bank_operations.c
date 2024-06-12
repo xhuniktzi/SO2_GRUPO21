@@ -50,6 +50,8 @@ struct operacion operaciones[MAX_OPERATIONS];
 typedef struct hilo_info {
     int id;
     json_t *root;
+    int start_index;
+    int end_index;
 } HiloInfo;
 
 void insertarUsuario(int numeroCuenta, char nombre[100], float saldo) {
@@ -121,24 +123,32 @@ void transferencia(int cuenta1, int cuenta2, float monto, int linea) {
 
 void* cargarUsuarios(void* arg) {
     HiloInfo *info_hilo = (HiloInfo *)arg;
-    size_t index;
-    json_t *value;
 
-    pthread_mutex_lock(&lock);
-    json_array_foreach(info_hilo->root, index, value) {
+    for (int i = info_hilo->start_index; i < info_hilo->end_index; i++) {
+        json_t *value = json_array_get(info_hilo->root, i);
+
         int cuenta = json_integer_value(json_object_get(value, "no_cuenta"));
         const char *nombre = json_string_value(json_object_get(value, "nombre"));
         double saldo = json_real_value(json_object_get(value, "saldo"));
 
+        pthread_mutex_lock(&lock);
         if (existeCuenta(cuenta)) {
             char error[200];
-            sprintf(error, "Línea #%lu - Cuenta duplicada %d\n", index + 1, cuenta);
+            sprintf(error, "Línea #%d - Cuenta duplicada %d\n", i + 1, cuenta);
             strcat(erroresUsuarios, error);
         } else {
             insertarUsuario(cuenta, (char *)nombre, (float)saldo);
+            usuariosLeidos++;
+            if (info_hilo->id == 1) {
+                usuariosHilo1++;
+            } else if (info_hilo->id == 2) {
+                usuariosHilo2++;
+            } else {
+                usuariosHilo3++;
+            }
         }
+        pthread_mutex_unlock(&lock);
     }
-    pthread_mutex_unlock(&lock);
 
     pthread_exit(NULL);
     return NULL;
@@ -146,31 +156,41 @@ void* cargarUsuarios(void* arg) {
 
 void* cargarOperaciones(void *arg) {
     HiloInfo *info_hilo = (HiloInfo *)arg;
-    size_t index;
-    json_t *value;
 
-    pthread_mutex_lock(&lock);
-    json_array_foreach(info_hilo->root, index, value) {
+    for (int i = info_hilo->start_index; i < info_hilo->end_index; i++) {
+        json_t *value = json_array_get(info_hilo->root, i);
+
         int operacion = json_integer_value(json_object_get(value, "operacion"));
         int cuenta1 = json_integer_value(json_object_get(value, "cuenta1"));
         int cuenta2 = json_integer_value(json_object_get(value, "cuenta2"));
         double monto = json_real_value(json_object_get(value, "monto"));
 
+        pthread_mutex_lock(&lock);
         if (!existeCuenta(cuenta1) || (operacion == 3 && !existeCuenta(cuenta2))) {
             char error[200];
-            sprintf(error, "Línea #%lu - Cuenta no existe %d o %d\n", index + 1, cuenta1, cuenta2);
+            sprintf(error, "Línea #%d - Cuenta no existe %d o %d\n", i + 1, cuenta1, cuenta2);
             strcat(erroresOperaciones, error);
         } else {
             if (operacion == 1) {
                 deposito(cuenta1, (float)monto);
             } else if (operacion == 2) {
-                retiro(cuenta1, (float)monto, index + 1);
+                retiro(cuenta1, (float)monto, i + 1);
             } else if (operacion == 3) {
-                transferencia(cuenta1, cuenta2, (float)monto, index + 1);
+                transferencia(cuenta1, cuenta2, (float)monto, i + 1);
+            }
+            operacionesLeidas++;
+            if (info_hilo->id == 1) {
+                operacionesHilo1++;
+            } else if (info_hilo->id == 2) {
+                operacionesHilo2++;
+            } else if (info_hilo->id == 3) {
+                operacionesHilo3++;
+            } else {
+                operacionesHilo4++;
             }
         }
+        pthread_mutex_unlock(&lock);
     }
-    pthread_mutex_unlock(&lock);
 
     pthread_exit(NULL);
     return NULL;
@@ -189,6 +209,9 @@ void generarReporteUsuarios() {
     if (reporte) {
         fprintf(reporte, "Fecha: %s\n", fecha);
         fprintf(reporte, "Usuarios cargados: %d\n", usuariosLeidos);
+        fprintf(reporte, "Hilo 1: %d\n", usuariosHilo1);
+        fprintf(reporte, "Hilo 2: %d\n", usuariosHilo2);
+        fprintf(reporte, "Hilo 3: %d\n", usuariosHilo3);
         fprintf(reporte, "Errores:\n%s", erroresUsuarios);
         fclose(reporte);
     }
@@ -207,6 +230,10 @@ void generarReporteOperaciones() {
     if (reporte) {
         fprintf(reporte, "Fecha: %s\n", fecha);
         fprintf(reporte, "Operaciones cargadas: %d\n", operacionesLeidas);
+        fprintf(reporte, "Hilo 1: %d\n", operacionesHilo1);
+        fprintf(reporte, "Hilo 2: %d\n", operacionesHilo2);
+        fprintf(reporte, "Hilo 3: %d\n", operacionesHilo3);
+        fprintf(reporte, "Hilo 4: %d\n", operacionesHilo4);
         fprintf(reporte, "Errores:\n%s", erroresOperaciones);
         fclose(reporte);
     }
@@ -214,7 +241,7 @@ void generarReporteOperaciones() {
 
 void estadoDeCuenta() {
     struct usuario* actual = cabezaUsuarios;
-    FILE *reporte = fopen("estado_de_cuenta.json", "w");
+    FILE *reporte = fopen("balance.json", "w");
     if (reporte) {
         json_t *root = json_array();
         while (actual != NULL) {
@@ -239,11 +266,16 @@ void cargarUsuariosMultithreaded(const char *filename) {
         return;
     }
 
+    size_t total_usuarios = json_array_size(root);
+    size_t chunk_size = total_usuarios / THREADS_USERS;
+
     pthread_t threads[THREADS_USERS];
     HiloInfo info[THREADS_USERS];
     for (int i = 0; i < THREADS_USERS; i++) {
         info[i].id = i + 1;
         info[i].root = root;
+        info[i].start_index = i * chunk_size;
+        info[i].end_index = (i == THREADS_USERS - 1) ? total_usuarios : (i + 1) * chunk_size;
         pthread_create(&threads[i], NULL, cargarUsuarios, &info[i]);
     }
 
@@ -263,11 +295,16 @@ void cargarOperacionesMultithreaded(const char *filename) {
         return;
     }
 
+    size_t total_operaciones = json_array_size(root);
+    size_t chunk_size = total_operaciones / THREADS_OPERATIONS;
+
     pthread_t threads[THREADS_OPERATIONS];
     HiloInfo info[THREADS_OPERATIONS];
     for (int i = 0; i < THREADS_OPERATIONS; i++) {
         info[i].id = i + 1;
         info[i].root = root;
+        info[i].start_index = i * chunk_size;
+        info[i].end_index = (i == THREADS_OPERATIONS - 1) ? total_operaciones : (i + 1) * chunk_size;
         pthread_create(&threads[i], NULL, cargarOperaciones, &info[i]);
     }
 
