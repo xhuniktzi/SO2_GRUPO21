@@ -1,20 +1,20 @@
 [
     {
         "operacion": 1,
-        "cuenta1": 1001,
+        "cuenta1": 1,
         "cuenta2": 0,
-        "monto": 500.0
+        "monto": 500.00
     },
     {
         "operacion": 2,
-        "cuenta1": 1002,
+        "cuenta1": 2,
         "cuenta2": 0,
-        "monto": 300.0
+        "monto": 300.00
     },
     {
         "operacion": 3,
-        "cuenta1": 1003,
-        "cuenta2": 1001,
-        "monto": 200.0
+        "cuenta1": 3,
+        "cuenta2": 1,
+        "monto": 50.00
     }
 ]
