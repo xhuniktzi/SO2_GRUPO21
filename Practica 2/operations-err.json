@@ -10,19 +10,19 @@
         "cuenta1": 2,
         "cuenta2": 0,
         "monto": 3000.00
-    }, 
+    }, // Saldo insuficiente
     {
         "operacion": 3,
         "cuenta1": 3,
         "cuenta2": 4,
         "monto": 50.00
-    }, 
+    }, // Cuenta con saldo negativo
     {
         "operacion": 3,
         "cuenta1": 6,
         "cuenta2": 11,
         "monto": 100.00
-    }, 
+    }, // Cuenta destino no existe
     {
         "operacion": 1,
         "cuenta1": 4,
@@ -40,7 +40,7 @@
         "cuenta1": 7,
         "cuenta2": 8,
         "monto": 5000.00
-    }, 
+    }, // Saldo insuficiente
     {
         "operacion": 3,
         "cuenta1": 8,

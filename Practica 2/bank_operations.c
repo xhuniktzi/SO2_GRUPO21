@@ -160,6 +160,12 @@ void *load_users(void *arg)
             snprintf(error, sizeof(error), "Line #%d - Duplicate account %d\n", i + 1, account);
             strncat(user_errors, error, sizeof(user_errors) - strlen(user_errors) - 1);
         }
+        else if (balance < 0)
+        {
+            char error[200];
+            snprintf(error, sizeof(error), "Line #%d - Negative balance in account %d\n", i + 1, account);
+            strncat(user_errors, error, sizeof(user_errors) - strlen(user_errors) - 1);
+        }
         else
         {
             insert_user(account, name, balance);
