@@ -3,9 +3,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include <pthread.h>
-#include <unistd.h>
-#include <semaphore.h>
-#include <regex.h>
 #include <time.h>
 #include <jansson.h>
 
@@ -13,174 +10,161 @@
 #define THREADS_OPERATIONS 4
 #define MAX_USERS 1000
 #define MAX_OPERATIONS 1000
+#define MAX_ERROR_LENGTH 10000
+#define MAX_NAME_LENGTH 100
 
 pthread_mutex_t lock;
-int usuariosLeidos;
-int usuariosHilo1;
-int usuariosHilo2;
-int usuariosHilo3;
 
-int operacionesLeidas;
-int operacionesHilo1;
-int operacionesHilo2;
-int operacionesHilo3;
-int operacionesHilo4;
-
-struct usuario
+typedef struct User
 {
-    int no_cuenta;
-    char nombre[100];
-    float saldo;
-    struct usuario *siguiente;
-};
-struct usuario *cabezaUsuarios = NULL;
+    int account_number;
+    char name[MAX_NAME_LENGTH];
+    float balance;
+    struct User *next;
+} User;
 
-struct operacion
+typedef struct Operation
 {
-    int operacion;
-    int cuenta1;
-    int cuenta2;
-    float monto;
-};
+    int type; // 1 -> Deposit, 2 -> Withdrawal, 3 -> Transfer
+    int account1;
+    int account2;
+    float amount;
+} Operation;
 
-char erroresUsuarios[10000];
-char erroresOperaciones[10000];
-
-struct usuario usuarios[MAX_USERS];
-struct operacion operaciones[MAX_OPERATIONS];
-
-typedef struct hilo_info
+typedef struct ThreadInfo
 {
     int id;
     json_t *root;
     int start_index;
     int end_index;
-} HiloInfo;
+} ThreadInfo;
 
-void insertarUsuario(int numeroCuenta, char nombre[100], float saldo)
+User *user_list = NULL;
+char user_errors[MAX_ERROR_LENGTH] = "";
+char operation_errors[MAX_ERROR_LENGTH] = "";
+int total_users_loaded = 0;
+int users_per_thread[THREADS_USERS] = {0};
+int total_operations_loaded = 0;
+int operations_per_thread[THREADS_OPERATIONS] = {0};
+
+void insert_user(int account_number, const char *name, float balance)
 {
-    struct usuario *nuevoNodo = (struct usuario *)malloc(sizeof(struct usuario));
-    nuevoNodo->no_cuenta = numeroCuenta;
-    strcpy(nuevoNodo->nombre, nombre);
-    nuevoNodo->saldo = saldo;
-    nuevoNodo->siguiente = cabezaUsuarios;
-    cabezaUsuarios = nuevoNodo;
+    User *new_user = (User *)malloc(sizeof(User));
+    new_user->account_number = account_number;
+    strcpy(new_user->name, name);
+    new_user->balance = balance;
+    new_user->next = user_list;
+    user_list = new_user;
 }
 
-bool existeCuenta(int numeroCuenta)
+bool account_exists(int account_number)
 {
-    struct usuario *actual = cabezaUsuarios;
-    while (actual != NULL)
+    User *current = user_list;
+    while (current != NULL)
     {
-        if (actual->no_cuenta == numeroCuenta)
+        if (current->account_number == account_number)
         {
             return true;
         }
-        actual = actual->siguiente;
+        current = current->next;
     }
     return false;
 }
 
-struct usuario *getUsuario(int numeroCuenta)
+User *get_user(int account_number)
 {
-    struct usuario *actual = cabezaUsuarios;
-    while (actual != NULL)
+    User *current = user_list;
+    while (current != NULL)
     {
-        if (actual->no_cuenta == numeroCuenta)
+        if (current->account_number == account_number)
         {
-            return actual;
+            return current;
         }
-        actual = actual->siguiente;
+        current = current->next;
     }
     return NULL;
 }
 
-void deposito(int cuenta, float monto)
+void deposit(int account_number, float amount)
 {
-    struct usuario *usuario = getUsuario(cuenta);
-    usuario->saldo = usuario->saldo + monto;
+    User *user = get_user(account_number);
+    if (user)
+    {
+        user->balance += amount;
+    }
 }
 
-void retiro(int cuenta, float monto, int linea)
+void withdraw(int account_number, float amount, int line_number)
 {
-    struct usuario *usuario = getUsuario(cuenta);
-    char error[200];
-    if (usuario->saldo - monto >= 0)
+    User *user = get_user(account_number);
+    if (user && user->balance >= amount)
     {
-        usuario->saldo = usuario->saldo - monto;
+        user->balance -= amount;
     }
     else
     {
-        if (linea > 0)
+        if (line_number > 0)
         {
-            sprintf(error, "Línea #%d - Saldo insuficiente en cuenta %d\n", linea, cuenta);
-            strcat(erroresOperaciones, error);
+            char error[200];
+            snprintf(error, sizeof(error), "Line #%d - Insufficient balance in account %d\n", line_number, account_number);
+            strncat(operation_errors, error, sizeof(operation_errors) - strlen(operation_errors) - 1);
         }
     }
 }
 
-void transferencia(int cuenta1, int cuenta2, float monto, int linea)
+void transfer(int account1, int account2, float amount, int line_number)
 {
-    struct usuario *origen = getUsuario(cuenta1);
-    struct usuario *destino = getUsuario(cuenta2);
-    char error[200];
-    if (origen == NULL)
+    User *user1 = get_user(account1);
+    User *user2 = get_user(account2);
+    if (!user1)
     {
-        sprintf(error, "Línea #%d - Cuenta origen %d no existe\n", linea, cuenta1);
-        strcat(erroresOperaciones, error);
+        char error[200];
+        snprintf(error, sizeof(error), "Line #%d - Source account %d does not exist\n", line_number, account1);
+        strncat(operation_errors, error, sizeof(operation_errors) - strlen(operation_errors) - 1);
         return;
     }
-    if (destino == NULL)
+    if (!user2)
     {
-        sprintf(error, "Línea #%d - Cuenta destino %d no existe\n", linea, cuenta2);
-        strcat(erroresOperaciones, error);
+        char error[200];
+        snprintf(error, sizeof(error), "Line #%d - Destination account %d does not exist\n", line_number, account2);
+        strncat(operation_errors, error, sizeof(operation_errors) - strlen(operation_errors) - 1);
         return;
     }
-    if (origen->saldo < monto)
+    if (user1->balance < amount)
     {
-        sprintf(error, "Línea #%d - Saldo insuficiente en cuenta %d\n", linea, cuenta1);
-        strcat(erroresOperaciones, error);
+        char error[200];
+        snprintf(error, sizeof(error), "Line #%d - Insufficient balance in account %d\n", line_number, account1);
+        strncat(operation_errors, error, sizeof(operation_errors) - strlen(operation_errors) - 1);
         return;
     }
-    origen->saldo -= monto;
-    destino->saldo += monto;
+    user1->balance -= amount;
+    user2->balance += amount;
 }
 
-void *cargarUsuarios(void *arg)
+void *load_users(void *arg)
 {
-    HiloInfo *info_hilo = (HiloInfo *)arg;
+    ThreadInfo *info = (ThreadInfo *)arg;
 
-    for (int i = info_hilo->start_index; i < info_hilo->end_index; i++)
+    for (int i = info->start_index; i < info->end_index; i++)
     {
-        json_t *value = json_array_get(info_hilo->root, i);
+        json_t *value = json_array_get(info->root, i);
 
-        int cuenta = json_integer_value(json_object_get(value, "no_cuenta"));
-        const char *nombre = json_string_value(json_object_get(value, "nombre"));
-        double saldo = json_real_value(json_object_get(value, "saldo"));
+        int account = json_integer_value(json_object_get(value, "no_cuenta"));
+        const char *name = json_string_value(json_object_get(value, "nombre"));
+        float balance = json_real_value(json_object_get(value, "saldo"));
 
         pthread_mutex_lock(&lock);
-        if (existeCuenta(cuenta))
+        if (account_exists(account))
         {
             char error[200];
-            sprintf(error, "Línea #%d - Cuenta duplicada %d\n", i + 1, cuenta);
-            strcat(erroresUsuarios, error);
+            snprintf(error, sizeof(error), "Line #%d - Duplicate account %d\n", i + 1, account);
+            strncat(user_errors, error, sizeof(user_errors) - strlen(user_errors) - 1);
         }
         else
         {
-            insertarUsuario(cuenta, (char *)nombre, (float)saldo);
-            usuariosLeidos++;
-            if (info_hilo->id == 1)
-            {
-                usuariosHilo1++;
-            }
-            else if (info_hilo->id == 2)
-            {
-                usuariosHilo2++;
-            }
-            else
-            {
-                usuariosHilo3++;
-            }
+            insert_user(account, name, balance);
+            total_users_loaded++;
+            users_per_thread[info->id - 1]++;
         }
         pthread_mutex_unlock(&lock);
     }
@@ -189,57 +173,42 @@ void *cargarUsuarios(void *arg)
     return NULL;
 }
 
-void *cargarOperaciones(void *arg)
+void *load_operations(void *arg)
 {
-    HiloInfo *info_hilo = (HiloInfo *)arg;
+    ThreadInfo *info = (ThreadInfo *)arg;
 
-    for (int i = info_hilo->start_index; i < info_hilo->end_index; i++)
+    for (int i = info->start_index; i < info->end_index; i++)
     {
-        json_t *value = json_array_get(info_hilo->root, i);
+        json_t *value = json_array_get(info->root, i);
 
-        int operacion = json_integer_value(json_object_get(value, "operacion"));
-        int cuenta1 = json_integer_value(json_object_get(value, "cuenta1"));
-        int cuenta2 = json_integer_value(json_object_get(value, "cuenta2"));
-        double monto = json_real_value(json_object_get(value, "monto"));
+        int operation_type = json_integer_value(json_object_get(value, "operacion"));
+        int account1 = json_integer_value(json_object_get(value, "cuenta1"));
+        int account2 = json_integer_value(json_object_get(value, "cuenta2"));
+        float amount = json_real_value(json_object_get(value, "monto"));
 
         pthread_mutex_lock(&lock);
-        if (!existeCuenta(cuenta1) || (operacion == 3 && !existeCuenta(cuenta2)))
+        if (!account_exists(account1) || (operation_type == 3 && !account_exists(account2)))
         {
             char error[200];
-            sprintf(error, "Línea #%d - Cuenta no existe %d o %d\n", i + 1, cuenta1, cuenta2);
-            strcat(erroresOperaciones, error);
+            snprintf(error, sizeof(error), "Line #%d - Account %d or %d does not exist\n", i + 1, account1, account2);
+            strncat(operation_errors, error, sizeof(operation_errors) - strlen(operation_errors) - 1);
         }
         else
         {
-            if (operacion == 1)
+            if (operation_type == 1)
             {
-                deposito(cuenta1, (float)monto);
+                deposit(account1, amount);
             }
-            else if (operacion == 2)
+            else if (operation_type == 2)
             {
-                retiro(cuenta1, (float)monto, i + 1);
+                withdraw(account1, amount, i + 1);
             }
-            else if (operacion == 3)
+            else if (operation_type == 3)
             {
-                transferencia(cuenta1, cuenta2, (float)monto, i + 1);
+                transfer(account1, account2, amount, i + 1);
             }
-            operacionesLeidas++;
-            if (info_hilo->id == 1)
-            {
-                operacionesHilo1++;
-            }
-            else if (info_hilo->id == 2)
-            {
-                operacionesHilo2++;
-            }
-            else if (info_hilo->id == 3)
-            {
-                operacionesHilo3++;
-            }
-            else
-            {
-                operacionesHilo4++;
-            }
+            total_operations_loaded++;
+            operations_per_thread[info->id - 1]++;
         }
         pthread_mutex_unlock(&lock);
     }
@@ -248,97 +217,100 @@ void *cargarOperaciones(void *arg)
     return NULL;
 }
 
-void generarReporteUsuarios()
+void generate_user_report()
 {
-    char nombre[100];
-    char fecha[100];
-    time_t tiempo_actual;
-    struct tm *info_tiempo;
-    time(&tiempo_actual);
-    info_tiempo = localtime(&tiempo_actual);
-    strftime(nombre, sizeof(nombre), "carga_%Y_%m_%d-%H_%M_%S.log", info_tiempo);
-    strftime(fecha, sizeof(fecha), "%Y-%m-%d %H:%M:%S", info_tiempo);
-    FILE *reporte = fopen(nombre, "w");
-    if (reporte)
+    char filename[100];
+    char date[100];
+    time_t now;
+    struct tm *info_time;
+    time(&now);
+    info_time = localtime(&now);
+    strftime(filename, sizeof(filename), "user_load_%Y_%m_%d-%H_%M_%S.log", info_time);
+    strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", info_time);
+
+    FILE *report = fopen(filename, "w");
+    if (report)
     {
-        fprintf(reporte, "Fecha: %s\n", fecha);
-        fprintf(reporte, "Usuarios cargados: %d\n", usuariosLeidos);
-        fprintf(reporte, "Hilo 1: %d\n", usuariosHilo1);
-        fprintf(reporte, "Hilo 2: %d\n", usuariosHilo2);
-        fprintf(reporte, "Hilo 3: %d\n", usuariosHilo3);
-        fprintf(reporte, "Errores:\n%s", erroresUsuarios);
-        fclose(reporte);
+        fprintf(report, "Date: %s\n", date);
+        fprintf(report, "Total users loaded: %d\n", total_users_loaded);
+        for (int i = 0; i < THREADS_USERS; i++)
+        {
+            fprintf(report, "Thread %d: %d users\n", i + 1, users_per_thread[i]);
+        }
+        fprintf(report, "Errors:\n%s", user_errors);
+        fclose(report);
     }
 }
 
-void generarReporteOperaciones()
+void generate_operation_report()
 {
-    char nombre[100];
-    char fecha[100];
-    time_t tiempo_actual;
-    struct tm *info_tiempo;
-    time(&tiempo_actual);
-    info_tiempo = localtime(&tiempo_actual);
-    strftime(nombre, sizeof(nombre), "operaciones_%Y_%m_%d-%H_%M_%S.log", info_tiempo);
-    strftime(fecha, sizeof(fecha), "%Y-%m-%d %H:%M:%S", info_tiempo);
-    FILE *reporte = fopen(nombre, "w");
-    if (reporte)
+    char filename[100];
+    char date[100];
+    time_t now;
+    struct tm *info_time;
+    time(&now);
+    info_time = localtime(&now);
+    strftime(filename, sizeof(filename), "operations_%Y_%m_%d-%H_%M_%S.log", info_time);
+    strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", info_time);
+
+    FILE *report = fopen(filename, "w");
+    if (report)
     {
-        fprintf(reporte, "Fecha: %s\n", fecha);
-        fprintf(reporte, "Operaciones cargadas: %d\n", operacionesLeidas);
-        fprintf(reporte, "Hilo 1: %d\n", operacionesHilo1);
-        fprintf(reporte, "Hilo 2: %d\n", operacionesHilo2);
-        fprintf(reporte, "Hilo 3: %d\n", operacionesHilo3);
-        fprintf(reporte, "Hilo 4: %d\n", operacionesHilo4);
-        fprintf(reporte, "Errores:\n%s", erroresOperaciones);
-        fclose(reporte);
+        fprintf(report, "Date: %s\n", date);
+        fprintf(report, "Total operations loaded: %d\n", total_operations_loaded);
+        for (int i = 0; i < THREADS_OPERATIONS; i++)
+        {
+            fprintf(report, "Thread %d: %d operations\n", i + 1, operations_per_thread[i]);
+        }
+        fprintf(report, "Errors:\n%s", operation_errors);
+        fclose(report);
     }
 }
 
-void estadoDeCuenta()
+void generate_balance_report()
 {
-    struct usuario *actual = cabezaUsuarios;
-    FILE *reporte = fopen("balance.json", "w");
-    if (reporte)
+    User *current = user_list;
+    FILE *report = fopen("balance.json", "w");
+    if (report)
     {
         json_t *root = json_array();
-        while (actual != NULL)
+        while (current != NULL)
         {
             json_t *user = json_object();
-            json_object_set_new(user, "no_cuenta", json_integer(actual->no_cuenta));
-            json_object_set_new(user, "nombre", json_string(actual->nombre));
-            json_object_set_new(user, "saldo", json_real(actual->saldo));
+            json_object_set_new(user, "no_cuenta", json_integer(current->account_number));
+            json_object_set_new(user, "nombre", json_string(current->name));
+            json_object_set_new(user, "saldo", json_real(current->balance));
             json_array_append_new(root, user);
-            actual = actual->siguiente;
+            current = current->next;
         }
-        json_dumpf(root, reporte, JSON_INDENT(2));
+        json_dumpf(root, report, JSON_INDENT(2));
         json_decref(root);
-        fclose(reporte);
+        fclose(report);
     }
 }
 
-void cargarUsuariosMultithreaded(const char *filename)
+void load_users_multithreaded(const char *filename)
 {
     json_error_t error;
     json_t *root = json_load_file(filename, 0, &error);
     if (!root)
     {
-        fprintf(stderr, "Error al cargar archivo JSON: %s\n", error.text);
+        fprintf(stderr, "Error loading JSON file: %s\n", error.text);
         return;
     }
 
-    size_t total_usuarios = json_array_size(root);
-    size_t chunk_size = total_usuarios / THREADS_USERS;
+    size_t total_users = json_array_size(root);
+    size_t chunk_size = total_users / THREADS_USERS;
 
     pthread_t threads[THREADS_USERS];
-    HiloInfo info[THREADS_USERS];
+    ThreadInfo info[THREADS_USERS];
     for (int i = 0; i < THREADS_USERS; i++)
     {
         info[i].id = i + 1;
         info[i].root = root;
         info[i].start_index = i * chunk_size;
-        info[i].end_index = (i == THREADS_USERS - 1) ? total_usuarios : (i + 1) * chunk_size;
-        pthread_create(&threads[i], NULL, cargarUsuarios, &info[i]);
+        info[i].end_index = (i == THREADS_USERS - 1) ? total_users : (i + 1) * chunk_size;
+        pthread_create(&threads[i], NULL, load_users, &info[i]);
     }
 
     for (int i = 0; i < THREADS_USERS; i++)
@@ -347,31 +319,31 @@ void cargarUsuariosMultithreaded(const char *filename)
     }
 
     json_decref(root);
-    generarReporteUsuarios();
+    generate_user_report();
 }
 
-void cargarOperacionesMultithreaded(const char *filename)
+void load_operations_multithreaded(const char *filename)
 {
     json_error_t error;
     json_t *root = json_load_file(filename, 0, &error);
     if (!root)
     {
-        fprintf(stderr, "Error al cargar archivo JSON: %s\n", error.text);
+        fprintf(stderr, "Error loading JSON file: %s\n", error.text);
         return;
     }
 
-    size_t total_operaciones = json_array_size(root);
-    size_t chunk_size = total_operaciones / THREADS_OPERATIONS;
+    size_t total_operations = json_array_size(root);
+    size_t chunk_size = total_operations / THREADS_OPERATIONS;
 
     pthread_t threads[THREADS_OPERATIONS];
-    HiloInfo info[THREADS_OPERATIONS];
+    ThreadInfo info[THREADS_OPERATIONS];
     for (int i = 0; i < THREADS_OPERATIONS; i++)
     {
         info[i].id = i + 1;
         info[i].root = root;
         info[i].start_index = i * chunk_size;
-        info[i].end_index = (i == THREADS_OPERATIONS - 1) ? total_operaciones : (i + 1) * chunk_size;
-        pthread_create(&threads[i], NULL, cargarOperaciones, &info[i]);
+        info[i].end_index = (i == THREADS_OPERATIONS - 1) ? total_operations : (i + 1) * chunk_size;
+        pthread_create(&threads[i], NULL, load_operations, &info[i]);
     }
 
     for (int i = 0; i < THREADS_OPERATIONS; i++)
@@ -380,107 +352,107 @@ void cargarOperacionesMultithreaded(const char *filename)
     }
 
     json_decref(root);
-    generarReporteOperaciones();
+    generate_operation_report();
 }
 
-void mostrarMenu()
+void show_menu()
 {
-    printf("1. Cargar usuarios\n");
-    printf("2. Cargar operaciones\n");
-    printf("3. Operaciones individuales\n");
-    printf("4. Generar estado de cuentas\n");
-    printf("5. Salir\n");
+    printf("1. Load users\n");
+    printf("2. Load operations\n");
+    printf("3. Individual operations\n");
+    printf("4. Generate balance report\n");
+    printf("5. Exit\n");
 }
 
-void manejarEntradaUsuario()
+void handle_user_input()
 {
-    int opcion, cuenta1, cuenta2;
-    double monto;
+    int option, account1, account2;
+    float amount;
 
     while (1)
     {
-        mostrarMenu();
-        scanf("%d", &opcion);
+        show_menu();
+        scanf("%d", &option);
 
-        switch (opcion)
+        switch (option)
         {
         case 1:
-            cargarUsuariosMultithreaded("users.json");
+            load_users_multithreaded("users.json");
             break;
         case 2:
-            cargarOperacionesMultithreaded("operations.json");
+            load_operations_multithreaded("operations.json");
             break;
         case 3:
-            printf("1. Deposito\n2. Retiro\n3. Transferencia\n4. Consultar cuenta\n");
-            scanf("%d", &opcion);
-            switch (opcion)
+            printf("1. Deposit\n2. Withdraw\n3. Transfer\n4. Check account\n");
+            scanf("%d", &option);
+            switch (option)
             {
             case 1:
-                printf("Cuenta: ");
-                scanf("%d", &cuenta1);
-                printf("Monto: ");
-                scanf("%lf", &monto);
-                if (existeCuenta(cuenta1))
+                printf("Account: ");
+                scanf("%d", &account1);
+                printf("Amount: ");
+                scanf("%f", &amount);
+                if (account_exists(account1))
                 {
-                    deposito(cuenta1, monto);
+                    deposit(account1, amount);
                 }
                 else
                 {
-                    printf("Cuenta no encontrada\n");
+                    printf("Account not found\n");
                 }
                 break;
             case 2:
-                printf("Cuenta: ");
-                scanf("%d", &cuenta1);
-                printf("Monto: ");
-                scanf("%lf", &monto);
-                if (existeCuenta(cuenta1))
+                printf("Account: ");
+                scanf("%d", &account1);
+                printf("Amount: ");
+                scanf("%f", &amount);
+                if (account_exists(account1))
                 {
-                    retiro(cuenta1, monto, 0);
+                    withdraw(account1, amount, 0);
                 }
                 else
                 {
-                    printf("Cuenta no encontrada\n");
+                    printf("Account not found\n");
                 }
                 break;
             case 3:
-                printf("Cuenta origen: ");
-                scanf("%d", &cuenta1);
-                printf("Cuenta destino: ");
-                scanf("%d", &cuenta2);
-                printf("Monto: ");
-                scanf("%lf", &monto);
-                if (existeCuenta(cuenta1) && existeCuenta(cuenta2))
+                printf("Source account: ");
+                scanf("%d", &account1);
+                printf("Destination account: ");
+                scanf("%d", &account2);
+                printf("Amount: ");
+                scanf("%f", &amount);
+                if (account_exists(account1) && account_exists(account2))
                 {
-                    transferencia(cuenta1, cuenta2, monto, 0);
+                    transfer(account1, account2, amount, 0);
                 }
                 else
                 {
-                    printf("Cuenta no encontrada\n");
+                    printf("Account not found\n");
                 }
                 break;
             case 4:
-                printf("Cuenta: ");
-                scanf("%d", &cuenta1);
-                struct usuario *usuario = getUsuario(cuenta1);
-                if (usuario)
+                printf("Account: ");
+                scanf("%d", &account1);
+                User *user = get_user(account1);
+                if (user)
                 {
-                    printf("Cuenta: %d, Nombre: %s, Saldo: %.2f\n", usuario->no_cuenta, usuario->nombre, usuario->saldo);
+                    printf("Account: %d, Name: %s, Balance: %.2f\n", user->account_number, user->name, user->balance);
                 }
                 else
                 {
-                    printf("Cuenta no encontrada\n");
+                    printf("Account not found\n");
                 }
                 break;
             }
             break;
         case 4:
-            estadoDeCuenta();
+            generate_balance_report();
             break;
         case 5:
             return;
         default:
-            printf("Opción no válida\n");
+            printf("Invalid option\n");
         }
     }
 }
@@ -489,7 +461,7 @@ int main()
 {
     pthread_mutex_init(&lock, NULL);
 
-    manejarEntradaUsuario();
+    handle_user_input();
 
     pthread_mutex_destroy(&lock);
     return 0;
