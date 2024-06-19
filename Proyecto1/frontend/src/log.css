@@ -1,0 +1,67 @@
+.App-header{
+    background-color: #282c30;
+    color: white;
+    height: 5vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: calc(1px + 2vmin);
+    margin-bottom: 10px;
+}
+
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  
+  .top-half {
+    display: flex;
+    height: 45%;
+    flex: 1;
+  }
+  
+  .chart {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+  }
+  
+  .table1 {
+    flex: 1;
+    overflow-y: auto;
+  }
+  
+  .bottom-half {
+    flex: 1;
+    height: 45%;
+    overflow-y: auto;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  table th, table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+  }
+  
+  table th {
+    background-color: #f2f2f2;
+    text-align: left;
+    position: sticky;
+    top: 0; 
+    z-index: 1; 
+  }
+  
+  h2 {
+    margin: 0;
+    padding: 10px;
+    background-color: #f2f2f2;
+    align-self: center;
+  }
+  
