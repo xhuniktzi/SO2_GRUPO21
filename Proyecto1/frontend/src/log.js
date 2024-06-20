@@ -17,10 +17,10 @@ const MemoryLogs = () => {
     };
   
     useEffect(() => {
-      fetchLogs(); // Initial fetch
-      const interval = setInterval(fetchLogs, 15000); // Fetch every 15 seconds
+      fetchLogs(); 
+      const interval = setInterval(fetchLogs, 15000); 
   
-      return () => clearInterval(interval); // Clear interval on component unmount
+      return () => clearInterval(interval); 
     }, []);
   
 

@@ -1,0 +1,9 @@
+probe syscall.mmap2 {
+    printf("PID:%d,Proceso:%s,mmap:%lu bytes\n",
+        pid(), execname(), length)
+}
+
+probe syscall.munmap {
+    printf("PID:%d,Proceso:%s,munmap:%lu bytes\n",
+        pid(), execname(), length)
+}
