@@ -4,12 +4,15 @@ import PieChart from './chart.js';
 import './log.css';
 
 const MemoryLogs = () => {
-    const [logs, setLogs] = useState([]);
+    const [individualLogs, setIndividualLogs] = useState([]);
+    const [aggregatedLogs, setAggregatedLogs] = useState([]);
   
     const fetchLogs = () => {
       axios.get('http://localhost:8080/api/memorylogs')
         .then(response => {
-          setLogs(response.data);
+          const data = response.data;
+          setIndividualLogs(data.individual_logs);
+          setAggregatedLogs(data.aggregated_logs);
         })
         .catch(error => {
           console.error('Error fetching data:', error);
@@ -31,7 +34,7 @@ const MemoryLogs = () => {
       </header>
       <div className="top-half">
         <div className="chart">
-          <PieChart data={logs} />
+          <PieChart data={aggregatedLogs} />
         </div>
         <div className="table1">
           <h2>Resumen de Memoria por Proceso</h2>
@@ -45,12 +48,12 @@ const MemoryLogs = () => {
               </tr>
             </thead>
             <tbody>
-              {logs.map(log => (
+              {aggregatedLogs.map(log => (
                 <tr key={log.pid + log.timestamp}>
                   <td>{log.pid}</td>
                   <td>{log.process_name}</td>
-                  <td>{log.memory_size_mb} MB</td>
-                  <td>{log.memory_size_per}</td>
+                  <td>{log.total_memory_mb} MB</td>
+                  <td>{log.total_memory_per}</td>
                 </tr>
               ))}
             </tbody>
@@ -69,7 +72,7 @@ const MemoryLogs = () => {
             </tr>
           </thead>
           <tbody>
-            {logs.map(log => (
+            {individualLogs.map(log => (
               <tr key={log.pid + log.timestamp}>
                 <td>{log.pid}</td>
                 <td>{log.call_type}</td>

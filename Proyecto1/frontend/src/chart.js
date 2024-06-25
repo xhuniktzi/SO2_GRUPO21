@@ -15,16 +15,13 @@ const PieChart = ({ data }) => {
 
     data.forEach(log => {
       if (processMemory[log.process_name]) {
-        processMemory[log.process_name] += log.memory_size_mb;
+        processMemory[log.process_name] += log.total_memory_mb;
       } else {
-        processMemory[log.process_name] = log.memory_size_mb;
+        processMemory[log.process_name] = log.total_memory_mb;
       }
     });
 
-    // Sort processes by memory usage
     const sortedProcesses = Object.entries(processMemory).sort((a, b) => b[1] - a[1]);
-
-    // Limit to top 9 processes and group the rest into "otros"
     const topProcesses = sortedProcesses.slice(0, 10);
     const otherProcesses = sortedProcesses.slice(10);
 
@@ -79,8 +76,8 @@ const PieChart = ({ data }) => {
   };
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <div style={{ width: '100%', height: '100%',  justifyContent: 'center', alignItems: 'center' }}>
+    <div style={{ width: '75%', height: '125%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ width: '75%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
         <Pie data={processData()} options={options} />
       </div>
     </div>

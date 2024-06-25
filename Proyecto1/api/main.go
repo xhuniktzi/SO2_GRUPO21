@@ -31,6 +31,18 @@ type MemoryLog struct {
 	Timestamp     string  `json:"timestamp"`
 }
 
+type AggregatedMemoryLog struct {
+	PID            int     `json:"pid"`
+	ProcessName    string  `json:"process_name"`
+	TotalMemoryMB  float64 `json:"total_memory_mb"`
+	TotalMemoryPer float64 `json:"total_memory_per"`
+}
+
+type CombinedMemoryLogs struct {
+	IndividualLogs []MemoryLog           `json:"individual_logs"`
+	AggregatedLogs []AggregatedMemoryLog `json:"aggregated_logs"`
+}
+
 func main() {
 	router := mux.NewRouter()
 	cors := handlers.CORS(handlers.AllowedHeaders([]string{"Content-Type"}), handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE"}), handlers.AllowedOrigins([]string{"http://localhost:3000"}))
@@ -53,7 +65,7 @@ func getMemoryLogs(w http.ResponseWriter, r *http.Request) {
 	db := dbConn()
 	defer db.Close()
 
-	rows, err := db.Query("SELECT pid, process_name, call_type, memory_size, timestamp FROM memory_log ORDER BY timestamp DESC LIMIT 100")
+	rows, err := db.Query("SELECT pid, process_name, call_type, memory_size, timestamp FROM memory_log ORDER BY timestamp DESC")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -77,7 +89,14 @@ func getMemoryLogs(w http.ResponseWriter, r *http.Request) {
 		memoryLogs = append(memoryLogs, memLog)
 	}
 
-	jsonData, err := json.Marshal(memoryLogs)
+	aggregatedLogs := aggregateMemoryLogs(memoryLogs)
+
+	combinedLogs := CombinedMemoryLogs{
+		IndividualLogs: memoryLogs,
+		AggregatedLogs: aggregatedLogs,
+	}
+
+	jsonData, err := json.Marshal(combinedLogs)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,4 +104,36 @@ func getMemoryLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
+}
+
+func aggregateMemoryLogs(logs []MemoryLog) []AggregatedMemoryLog {
+	memoryMap := make(map[int]*AggregatedMemoryLog)
+
+	for _, log := range logs {
+		if _, exists := memoryMap[log.PID]; !exists {
+			memoryMap[log.PID] = &AggregatedMemoryLog{
+				PID:            log.PID,
+				ProcessName:    log.ProcessName,
+				TotalMemoryMB:  0,
+				TotalMemoryPer: 0,
+			}
+		}
+
+		if log.CallType == "mmap" {
+			memoryMap[log.PID].TotalMemoryMB += float64(log.MemorySize) / (1024.0 * 1024.0)
+		} else if log.CallType == "munmap" {
+			memoryMap[log.PID].TotalMemoryMB -= float64(log.MemorySize) / (1024.0 * 1024.0)
+		}
+
+		memoryMap[log.PID].TotalMemoryMB = math.Round(memoryMap[log.PID].TotalMemoryMB*100) / 100
+		memoryMap[log.PID].TotalMemoryPer = (memoryMap[log.PID].TotalMemoryMB * 1024 * 1024 / 8289133824) * 100
+		memoryMap[log.PID].TotalMemoryPer = math.Round(memoryMap[log.PID].TotalMemoryPer*100) / 100
+	}
+
+	var aggregatedLogs []AggregatedMemoryLog
+	for _, val := range memoryMap {
+		aggregatedLogs = append(aggregatedLogs, *val)
+	}
+
+	return aggregatedLogs
 }
